@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import CodeMirror from 'codemirror';
 import 'codemirror/mode/javascript/javascript.js';
@@ -9,13 +7,12 @@ import { init, embed } from '@lizozom/semanticjs';
 import { splitText } from './split_text.js';
 import { calculateCosineSimilarity } from './similarity.js';
 
-
 import '../css/styles.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'codemirror/lib/codemirror.css';
 
 /**
- * @type {Array<CodeMirror.TextMarker>}
+ * @type {Array<*>}
  */
 let markers = [];
 /**
@@ -25,12 +22,22 @@ let editor;
 let submitTime = 0;
 let isProcessing = false;
 let selectedIndex = -1;
+/** @type {string} */
 let selectedClassName = "";
+/** @type {*} */
 let prevCard;
-const nextButton = document.getElementById("next");
-const prevButton = document.getElementById("prev");
-const submitButton = document.getElementById("submit_button");
-const downloadBar = document.getElementById("loading-progress");
+const nextButton = /** @type {HTMLElement} */ (document.getElementById("next"));
+const prevButton = /** @type {HTMLElement} */ (document.getElementById("prev"));
+const submitButton = /** @type {HTMLElement} */ (document.getElementById("submit_button"));
+const resultsList = /** @type {HTMLElement} */ (document.getElementById('results-list'));
+const thresholdEl = /** @type {HTMLInputElement} */ (document.getElementById("threshold"));
+const progressBar = /** @type {HTMLInputElement} */ (document.getElementById("progressBarProgress"));
+const downloadBar = /** @type {HTMLInputElement} */ (document.getElementById("loading-progress"));
+const inputQueryEl = /** @type {HTMLInputElement} */ (document.getElementById("query-text"));
+const inputTextEl = /** @type {HTMLTextAreaElement} */ (document.getElementById("input-text")); 
+const splitTypeEl = /** @type {HTMLInputElement} */ (document.getElementById("split-type"));
+const splitParamEl = /** @type {HTMLInputElement} */ (document.getElementById("split-param"));
+const modelNameEl = /** @type {HTMLInputElement} */ (document.getElementById("model-name"));
 
 function removeHighlights() {
     for (let marker of markers) {
@@ -40,17 +47,13 @@ function removeHighlights() {
 }
 
 function deactivateSubmitButton() {
-    if (submitButton) {
-        submitButton.setAttribute("disabled", "");
-        submitButton.textContent = "Loading...";
-    }
+    submitButton.setAttribute("disabled", "");
+    submitButton.textContent = "Loading...";
 }
 
 function activateSubmitButton() {
-    if (submitButton) {
-        submitButton.removeAttribute("disabled");
-        submitButton.textContent = "Submit";
-    }
+    submitButton.removeAttribute("disabled");
+    submitButton.textContent = "Submit";
 }
 
 function finishCallback() {
@@ -68,7 +71,7 @@ async function onSubmit() {
         isProcessing = true;
         submitButton.textContent = "Stop";
 
-        document.getElementById('results-list').innerHTML = '';
+        resultsList.innerHTML = '';
         selectedIndex = -1;
         await semanticHighlight(finishCallback);
     } else {
@@ -82,8 +85,7 @@ function resetResults() {
     removeHighlights();
 
     // Get results list element
-    let resultsDiv = document.getElementById('results-list');
-    resultsDiv.innerHTML = '';
+    resultsList.innerHTML = '';
 }
 
 /**
@@ -92,7 +94,7 @@ function resetResults() {
  */
 function updateResults(results) {
     resetResults();
-    const k = document.getElementById("threshold").value;
+    const k = Number(thresholdEl.value);
 
     for (let i = 0; i < Math.min(k, results.length); i++) {
         let resultItem = results[i];
@@ -113,7 +115,6 @@ function updateResults(results) {
  * @param {number} similarity
  */
 function createHighlight(text, className, similarity) {
-    let resultsDiv = document.getElementById('results-list');
     const cursor = editor.getSearchCursor(text);
 
     while (cursor.findNext()) {
@@ -125,13 +126,14 @@ function createHighlight(text, className, similarity) {
         listItem.classList.add('card');
         listItem.innerHTML = createCardHTML(text, similarity);
 
-        resultsDiv.appendChild(listItem);
+        resultsList.appendChild(listItem);
 
-        let index = resultsDiv.childElementCount - 1;
+        let index = resultsList.childElementCount - 1;
 
         // Add click listener for card
         listItem.addEventListener('click', function () {
-            editor.scrollIntoView(markers[index].find());
+            const foundMarkers = markers[index].find();
+            editor.scrollIntoView(foundMarkers);
             highlightSelected(index);
         });
     }
@@ -170,21 +172,26 @@ function highlightSelected(index) {
     markers[selectedIndex].clear();
     markers[selectedIndex] = marker1;
 }
-
+/**
+ * @param {number} index
+ */
 function highlightCard(index) {
-    let resultsDiv = document.getElementById('results-list');
-    let cards = resultsDiv.getElementsByClassName('card');
+    let cards = resultsList.getElementsByClassName('card');
 
     // Ensure the index is within the range of the cards.
     if (prevCard) {
         prevCard.style.backgroundColor = '';
     }
     prevCard = cards[index];
+
+    // @ts-ignore
     cards[index].style.backgroundColor = '#f4ac90';
 }
 
+/**
+ * @param {*} value 
+ */
 function setProgressBarValue(value) {
-    var progressBar = document.getElementById('progressBarProgress');
     if (value === "" || value == "0") {
         progressBar.style.transition = 'width .1s ease'; // Temporarily override the transition duration
         progressBar.classList.add('progress-bar-animated');
@@ -192,9 +199,7 @@ function setProgressBarValue(value) {
     } else {
         progressBar.style.transition = ''; // Restore the original transition
     }
-
-    progressBar.style.width = value + '%';
-    progressBar.textContent = value + '%';
+    //@ts-ignore
     progressBar.parentNode.setAttribute('aria-valuenow', value);
 
 
@@ -204,8 +209,9 @@ function setProgressBarValue(value) {
     }
 }
 
-
-
+/**
+ * @param {Function} callback 
+ */
 async function semanticHighlight(callback) {
     deactivateScrollButtons();
     resetResults();
@@ -213,13 +219,14 @@ async function semanticHighlight(callback) {
 
     // query input embedding
     const text = editor.getValue("");
-    const inputQuery = document.getElementById("query-text").value;
-    const splitType = document.getElementById('split-type').value;
-    const splitParam = document.getElementById('split-param').value;
+    const inputQuery = inputQueryEl.value;
+    const splitType = splitTypeEl.value;
+    const splitParam =splitParamEl.value;
     const inputTexts = await splitText(text, splitType, splitParam);
 
     const embeddedQuery = await embed(inputQuery);
 
+    /** @type {Array<[string, number]>} */
     let results = [];
 
     // Only update results a max of num_updates times
@@ -257,24 +264,14 @@ async function semanticHighlight(callback) {
 
 function activateScrollButtons() {
     // Enable the next and prev buttons
-    if (nextButton) {
-        nextButton.removeAttribute("disabled");
-    }
-
-    if (prevButton) {
-        prevButton.removeAttribute("disabled");
-    }
+    nextButton.removeAttribute("disabled");
+    prevButton.removeAttribute("disabled");
 }
 
 function deactivateScrollButtons() {
     // Disable the next and prev buttons
-    if (nextButton) {
-        nextButton.setAttribute("disabled", "");
-    }
-
-    if (prevButton) {
-        prevButton.setAttribute("disabled", "");
-    }
+    nextButton.setAttribute("disabled", "");
+    prevButton.setAttribute("disabled", "");
 }
 
 function nextMarker() {
@@ -296,6 +293,28 @@ function prevMarker() {
         editor.scrollIntoView(markers[selectedIndex].find());
     }
 }
+
+// /**
+//  * @param {*} progressMessage 
+//  */
+// const onModelLoadProgress = (progressMessage) => {
+//     const { file, status, progress } = progressMessage;
+//     if (file === "onnx/model_quantized.onnx") {
+//         switch (status) {
+//             case 'progress': 
+//                 const rProgress = progress.toFixed(2);
+//                 downloadBar.style.width = `${rProgress}%`;
+//                 downloadBar.textContent = `${rProgress}%`;
+//                 downloadBar.setAttribute('aria-valuenow', rProgress);
+//                 break;
+//             case 'ready':
+//                 downloadBar.style.width = '100%';
+//                 downloadBar.setAttribute('aria-valuenow', '100');
+//                 downloadBar.textContent = "";
+//                 break;
+//         }
+//     }
+// }
 
 /**
  * @param {*} progressMessage 
@@ -323,16 +342,13 @@ const onModelLoadProgress = (progressMessage) => {
  * Setup the application when the page loads.
  */
 window.onload = async function () {
-    window.onSubmit = onSubmit;
-
-    editor = CodeMirror.fromTextArea(document.getElementById('input-text'), {
+    editor = CodeMirror.fromTextArea(inputTextEl, {
         lineNumbers: true,
         mode: 'text/plain',
-        matchBrackets: true,
         lineWrapping: true,
     });
 
-    document.getElementById('model-name').addEventListener('change', async function() {
+    modelNameEl.addEventListener('change', async function() {
         deactivateSubmitButton();
         setProgressBarValue(0);
         var model_name = this.value;
@@ -340,51 +356,53 @@ window.onload = async function () {
         activateSubmitButton();
     });
 
+    submitButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        onSubmit();
+    });
 
-    document.getElementById('split-type').addEventListener('change', function() {
+    splitTypeEl.addEventListener('change', function() {
         // Get the selected option value
-        const split_param = document.getElementById('split-param')
-
+        const splitParamLabel = /** @type {HTMLInputElement} */ (document.querySelector("label[for='split-param']"));
         switch (this.value) {
             case "Words":
-                split_param.disabled = false;
-                document.querySelector("label[for='split-param']").textContent = "# Words";
-                split_param.type = 'number';
-                split_param.value = 7;
-                split_param.min = 1;
+                splitParamEl.disabled = false;
+                splitParamLabel.textContent = "# Words";
+                splitParamEl.type = 'number';
+                splitParamEl.value = "7";
+                splitParamEl.min = "1";
                 break;
             case "Tokens":
-                split_param.disabled = false;
-                document.querySelector("label[for='split-param']").textContent = "# Tokens";
-                split_param.type = 'number';
-                split_param.value = 15;
-                split_param.min = 1;
-                split_param.max = 512;
+                splitParamEl.disabled = false;
+                splitParamLabel.textContent = "# Tokens";
+                splitParamEl.type = 'number';
+                splitParamEl.value = "15";
+                splitParamEl.min = "1";
+                splitParamEl.max = "512";
                 break;
             case "Chars":
-                split_param.disabled = false;
-                document.querySelector("label[for='split-param']").textContent = "# Chars";
-                split_param.type = 'number';
-                split_param.value = 40;
-                split_param.min = 1;
+                splitParamEl.disabled = false;
+                splitParamLabel.textContent = "# Chars";
+                splitParamEl.type = 'number';
+                splitParamEl.value = "40";
+                splitParamEl.min = "1";
                 break;
             case "Regex":
-                split_param.disabled = false;
-                document.querySelector("label[for='split-param']").textContent = "Regex";
-                split_param.type = 'text';
-                split_param.value = "[.,]\\s";
+                splitParamEl.disabled = false;
+                splitParamLabel.textContent = "Regex";
+                splitParamEl.type = 'text';
+                splitParamEl.value = "[.,]\\s";
                 break;
             default:
-                split_param.value = null;
-                split_param.disabled = true;
-                document.querySelector("label[for='split-param']").textContent = "";
-                split_param.placeholder = "";
+                splitParamEl.value = "";
+                splitParamEl.disabled = true;
+                splitParamLabel.textContent = "";
+                splitParamEl.placeholder = "";
         }
     });
 
 
-    var accordionButton = document.querySelector('.accordion-button');
-
+    const accordionButton = /** @type {HTMLButtonElement} */ (document.querySelector('.accordion-button'));
     accordionButton.addEventListener('click', function() {
         var isExpanded = accordionButton.getAttribute('aria-expanded') === 'true';
 
@@ -395,16 +413,18 @@ window.onload = async function () {
         }
     });
 
-    let model_name = document.getElementById('model-name').value;
+    let model_name = modelNameEl.value;
     await init({ modelName: model_name}, onModelLoadProgress);
     activateSubmitButton();
 
-    document.getElementById('next').addEventListener('click', function (event) {
+    const nextBtn = /** @type {HTMLButtonElement} */ (document.getElementById('next'));
+    const prevBtn = /** @type {HTMLButtonElement} */ (document.getElementById('prev'));
+    nextBtn.addEventListener('click', function (event) {
         event.preventDefault();
         nextMarker();
     });
 
-    document.getElementById('prev').addEventListener('click', function (event) {
+    prevBtn.addEventListener('click', function (event) {
         event.preventDefault();
         prevMarker();
     });
